@@ -4,7 +4,7 @@ module System.Remote.Snap
     ( startServer
     ) where
 
-import Control.Applicative ((<$>), (<|>))
+import Control.Applicative ((<|>))
 import Control.Exception (throwIO)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as S

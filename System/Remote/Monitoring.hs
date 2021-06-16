@@ -45,7 +45,7 @@ module System.Remote.Monitoring
     , getDistribution
     ) where
 
-import Control.Concurrent (ThreadId, myThreadId, throwTo)
+import Control.Concurrent (ThreadId, forkFinally, myThreadId, throwTo)
 import Control.Exception (AsyncException(ThreadKilled), fromException)
 import qualified Data.ByteString as S
 import Data.Int (Int64)
@@ -60,13 +60,6 @@ import qualified System.Metrics.Gauge as Gauge
 import qualified System.Metrics.Label as Label
 import System.Remote.Snap
 import Network.Socket (withSocketsDo)
-
-#if __GLASGOW_HASKELL__ >= 706
-import Control.Concurrent (forkFinally)
-#else
-import Control.Concurrent (forkIO)
-import Control.Exception (SomeException, mask, try)
-#endif
 
 -- $configuration
 --
@@ -309,13 +302,3 @@ getDistribution :: T.Text  -- ^ Distribution name
                 -> IO Distribution.Distribution
 getDistribution name server =
     Metrics.createDistribution name (serverMetricStore server)
-
-------------------------------------------------------------------------
--- Backwards compatibility shims
-
-#if __GLASGOW_HASKELL__ < 706
-forkFinally :: IO a -> (Either SomeException a -> IO ()) -> IO ThreadId
-forkFinally action and_then =
-  mask $ \restore ->
-    forkIO $ try (restore action) >>= and_then
-#endif
