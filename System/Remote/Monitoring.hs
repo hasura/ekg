@@ -36,28 +36,16 @@ module System.Remote.Monitoring
     , forkServerNoHostname
     , forkServerWith
     , forkServerNoHostnameWith
-
-      -- * Defining metrics
-      -- $userdefined
-    , getCounter
-    , getGauge
-    , getLabel
-    , getDistribution
     ) where
 
 import Control.Concurrent (ThreadId, forkFinally, myThreadId, throwTo)
 import Control.Exception (AsyncException(ThreadKilled), fromException)
 import qualified Data.ByteString as S
 import Data.Int (Int64)
-import qualified Data.Text as T
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Prelude hiding (read)
 
 import qualified System.Metrics as Metrics
-import qualified System.Metrics.Counter as Counter
-import qualified System.Metrics.Distribution as Distribution
-import qualified System.Metrics.Gauge as Gauge
-import qualified System.Metrics.Label as Label
 import System.Remote.Snap
 import Network.Socket (withSocketsDo)
 
@@ -266,39 +254,3 @@ forkServerMaybeHostnameWith store host port = do
   where
     getTimeMs :: IO Int64
     getTimeMs = (round . (* 1000)) `fmap` getPOSIXTime
-
-------------------------------------------------------------------------
--- * Defining metrics
-
--- | Return a new, zero-initialized counter associated with the given
--- name and server. Multiple calls to 'getCounter' with the same
--- arguments will result in an 'error'.
-getCounter :: T.Text  -- ^ Counter name
-           -> Server  -- ^ Server that will serve the counter
-           -> IO Counter.Counter
-getCounter name server = Metrics.createCounter name (serverMetricStore server)
-
--- | Return a new, zero-initialized gauge associated with the given
--- name and server. Multiple calls to 'getGauge' with the same
--- arguments will result in an 'error'.
-getGauge :: T.Text  -- ^ Gauge name
-         -> Server  -- ^ Server that will serve the gauge
-         -> IO Gauge.Gauge
-getGauge name server = Metrics.createGauge name (serverMetricStore server)
-
--- | Return a new, empty label associated with the given name and
--- server. Multiple calls to 'getLabel' with the same arguments will
--- result in an 'error'.
-getLabel :: T.Text  -- ^ Label name
-         -> Server  -- ^ Server that will serve the label
-         -> IO Label.Label
-getLabel name server = Metrics.createLabel name (serverMetricStore server)
-
--- | Return a new distribution associated with the given name and
--- server. Multiple calls to 'getDistribution' with the same arguments
--- will result in an 'error'.
-getDistribution :: T.Text  -- ^ Distribution name
-                -> Server  -- ^ Server that will serve the distribution
-                -> IO Distribution.Distribution
-getDistribution name server =
-    Metrics.createDistribution name (serverMetricStore server)
