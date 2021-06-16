@@ -54,7 +54,12 @@ library
     transformers < 0.6,
     unordered-containers < 0.3
 
-  ghc-options: -Wall
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wredundant-constraints
 
 source-repository head
   type:     git
