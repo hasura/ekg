@@ -1,4 +1,8 @@
-{-# LANGUAGE CPP, OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | This module provides remote monitoring of a running process over
 -- HTTP.  It can be used to run an HTTP server that provides both a
@@ -176,7 +180,8 @@ data Server = Server {
       -- | The metric store associated with the server. If you want to
       -- add metric to the default store created by 'forkServer' you
       -- need to use this function to retrieve it.
-    , serverMetricStore :: {-# UNPACK #-} !Metrics.Store
+    , serverMetricStore ::
+        {-# UNPACK #-} !(Metrics.Store Metrics.AllMetrics)
     }
 
 -- | Like 'forkServerWith', but creates a default metric store with
@@ -187,7 +192,9 @@ forkServer :: S.ByteString  -- ^ Host to listen on (e.g. \"localhost\")
            -> IO Server
 forkServer host port = do
     store <- Metrics.newStore
-    Metrics.registerGcMetrics store
+    _ <- Metrics.register
+          (Metrics.subset Metrics.ofAll store)
+          Metrics.registerGcMetrics
     forkServerMaybeHostnameWith store (Just host) port
 
 -- | Create a server with prefined metrics from
@@ -199,7 +206,9 @@ forkServerNoHostname :: Int           -- ^ Port to listen on (e.g. 8000)
                      -> IO Server
 forkServerNoHostname port = do
     store <- Metrics.newStore
-    Metrics.registerGcMetrics store
+    _ <- Metrics.register
+          (Metrics.subset Metrics.ofAll store)
+          Metrics.registerGcMetrics
     forkServerMaybeHostnameWith store Nothing port
 
 -- | Start an HTTP server in a new thread.  The server replies to GET
@@ -221,7 +230,7 @@ forkServerNoHostname port = do
 -- store isn't created by you and the creator doesn't register the
 -- metrics registered by 'forkServer', you might want to register them
 -- yourself.
-forkServerWith :: Metrics.Store  -- ^ Metric store
+forkServerWith :: Metrics.Store Metrics.AllMetrics -- ^ Metric store
                -> S.ByteString   -- ^ Host to listen on (e.g. \"localhost\")
                -> Int            -- ^ Port to listen on (e.g. 8000)
                -> IO Server
@@ -231,18 +240,20 @@ forkServerWith store host port =
 -- | Start an HTTP server in a new thread, with the specified metrics
 -- store, listening on all interfaces.  Other than accepting requests
 -- to any hostname, this is the same as `forkServerWith`.
-forkServerNoHostnameWith :: Metrics.Store  -- ^ Metric store
+forkServerNoHostnameWith :: Metrics.Store Metrics.AllMetrics -- ^ Metric store
                          -> Int            -- ^ Port to listen on (e.g. 8000)
                          -> IO Server
 forkServerNoHostnameWith store port =
     forkServerMaybeHostnameWith store Nothing port
 
-forkServerMaybeHostnameWith :: Metrics.Store  -- ^ Metric store
+forkServerMaybeHostnameWith :: Metrics.Store Metrics.AllMetrics -- ^ Metric store
                             -> Maybe S.ByteString   -- ^ Host to listen on (e.g. \"localhost\")
                             -> Int            -- ^ Port to listen on (e.g. 8000)
                             -> IO Server
 forkServerMaybeHostnameWith store host port = do
-    Metrics.registerCounter "ekg.server_timestamp_ms" getTimeMs store
+    _ <- Metrics.register store $
+          Metrics.registerCounter
+            (Metrics.Metric @"ekg.server_timestamp_ms") () getTimeMs
     me <- myThreadId
     tid <- withSocketsDo $ forkFinally (startServer store host port) $ \ r ->
         case r of

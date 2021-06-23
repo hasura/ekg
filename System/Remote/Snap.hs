@@ -48,7 +48,7 @@ getNumericHostAddress host = do
     unsupportedAddressError = throwIO $
         userError $ "unsupported address: " ++ S8.unpack host
 
-startServer :: Store
+startServer :: Store metrics
             -> Maybe S.ByteString  -- ^ Host to listen on (e.g. \"localhost\")
             -> Int           -- ^ Port to listen on (e.g. 8000)
             -> IO ()
@@ -70,7 +70,7 @@ startServer store m_host port = do
     httpServe conf (monitor store)
 
 -- | A handler that can be installed into an existing Snap application.
-monitor :: Store -> Snap ()
+monitor :: Store metrics -> Snap ()
 monitor store = do
     dataDir <- liftIO getDataDir
     (jsonHandler $ serve store)
@@ -95,7 +95,7 @@ format fmt action = do
 
 -- | Serve all counter, gauges and labels, built-in or not, as a
 -- nested JSON object.
-serve :: MonadSnap m => Store -> m ()
+serve :: MonadSnap m => Store metrics -> m ()
 serve store = do
     req <- getRequest
     modifyResponse $ setContentType "application/json"
@@ -116,9 +116,12 @@ serve store = do
                 finishWith r
             Right name -> do
                 metrics <- liftIO $ sampleAll store
-                case M.lookup name metrics of
-                    Nothing -> pass
-                    Just metric -> writeLBS $ encodeOne metric
+                let metrics' =
+                      M.filterWithKey
+                        (\k _v -> idName k == name)
+                        metrics
+                if M.null metrics' then pass else
+                  writeLBS $ encodeAll metrics'
 
 ------------------------------------------------------------------------
 -- Utilities for working with accept headers
