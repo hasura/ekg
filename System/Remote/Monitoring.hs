@@ -1,4 +1,8 @@
-{-# LANGUAGE CPP, OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 -- | This module provides remote monitoring of a running process over
 -- HTTP.  It can be used to run an HTTP server that provides both a
@@ -36,37 +40,18 @@ module System.Remote.Monitoring
     , forkServerNoHostname
     , forkServerWith
     , forkServerNoHostnameWith
-
-      -- * Defining metrics
-      -- $userdefined
-    , getCounter
-    , getGauge
-    , getLabel
-    , getDistribution
     ) where
 
-import Control.Concurrent (ThreadId, myThreadId, throwTo)
+import Control.Concurrent (ThreadId, forkFinally, myThreadId, throwTo)
 import Control.Exception (AsyncException(ThreadKilled), fromException)
 import qualified Data.ByteString as S
 import Data.Int (Int64)
-import qualified Data.Text as T
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Prelude hiding (read)
 
 import qualified System.Metrics as Metrics
-import qualified System.Metrics.Counter as Counter
-import qualified System.Metrics.Distribution as Distribution
-import qualified System.Metrics.Gauge as Gauge
-import qualified System.Metrics.Label as Label
 import System.Remote.Snap
 import Network.Socket (withSocketsDo)
-
-#if __GLASGOW_HASKELL__ >= 706
-import Control.Concurrent (forkFinally)
-#else
-import Control.Concurrent (forkIO)
-import Control.Exception (SomeException, mask, try)
-#endif
 
 -- $configuration
 --
@@ -195,7 +180,8 @@ data Server = Server {
       -- | The metric store associated with the server. If you want to
       -- add metric to the default store created by 'forkServer' you
       -- need to use this function to retrieve it.
-    , serverMetricStore :: {-# UNPACK #-} !Metrics.Store
+    , serverMetricStore ::
+        {-# UNPACK #-} !(Metrics.Store Metrics.AllMetrics)
     }
 
 -- | Like 'forkServerWith', but creates a default metric store with
@@ -206,7 +192,9 @@ forkServer :: S.ByteString  -- ^ Host to listen on (e.g. \"localhost\")
            -> IO Server
 forkServer host port = do
     store <- Metrics.newStore
-    Metrics.registerGcMetrics store
+    _ <- Metrics.register
+          (Metrics.subset Metrics.ofAll store)
+          Metrics.registerGcMetrics
     forkServerMaybeHostnameWith store (Just host) port
 
 -- | Create a server with prefined metrics from
@@ -218,7 +206,9 @@ forkServerNoHostname :: Int           -- ^ Port to listen on (e.g. 8000)
                      -> IO Server
 forkServerNoHostname port = do
     store <- Metrics.newStore
-    Metrics.registerGcMetrics store
+    _ <- Metrics.register
+          (Metrics.subset Metrics.ofAll store)
+          Metrics.registerGcMetrics
     forkServerMaybeHostnameWith store Nothing port
 
 -- | Start an HTTP server in a new thread.  The server replies to GET
@@ -240,7 +230,7 @@ forkServerNoHostname port = do
 -- store isn't created by you and the creator doesn't register the
 -- metrics registered by 'forkServer', you might want to register them
 -- yourself.
-forkServerWith :: Metrics.Store  -- ^ Metric store
+forkServerWith :: Metrics.Store Metrics.AllMetrics -- ^ Metric store
                -> S.ByteString   -- ^ Host to listen on (e.g. \"localhost\")
                -> Int            -- ^ Port to listen on (e.g. 8000)
                -> IO Server
@@ -250,18 +240,20 @@ forkServerWith store host port =
 -- | Start an HTTP server in a new thread, with the specified metrics
 -- store, listening on all interfaces.  Other than accepting requests
 -- to any hostname, this is the same as `forkServerWith`.
-forkServerNoHostnameWith :: Metrics.Store  -- ^ Metric store
+forkServerNoHostnameWith :: Metrics.Store Metrics.AllMetrics -- ^ Metric store
                          -> Int            -- ^ Port to listen on (e.g. 8000)
                          -> IO Server
 forkServerNoHostnameWith store port =
     forkServerMaybeHostnameWith store Nothing port
 
-forkServerMaybeHostnameWith :: Metrics.Store  -- ^ Metric store
+forkServerMaybeHostnameWith :: Metrics.Store Metrics.AllMetrics -- ^ Metric store
                             -> Maybe S.ByteString   -- ^ Host to listen on (e.g. \"localhost\")
                             -> Int            -- ^ Port to listen on (e.g. 8000)
                             -> IO Server
 forkServerMaybeHostnameWith store host port = do
-    Metrics.registerCounter "ekg.server_timestamp_ms" getTimeMs store
+    _ <- Metrics.register store $
+          Metrics.registerCounter
+            (Metrics.Metric @"ekg.server_timestamp_ms") () getTimeMs
     me <- myThreadId
     tid <- withSocketsDo $ forkFinally (startServer store host port) $ \ r ->
         case r of
@@ -273,49 +265,3 @@ forkServerMaybeHostnameWith store host port = do
   where
     getTimeMs :: IO Int64
     getTimeMs = (round . (* 1000)) `fmap` getPOSIXTime
-
-------------------------------------------------------------------------
--- * Defining metrics
-
--- | Return a new, zero-initialized counter associated with the given
--- name and server. Multiple calls to 'getCounter' with the same
--- arguments will result in an 'error'.
-getCounter :: T.Text  -- ^ Counter name
-           -> Server  -- ^ Server that will serve the counter
-           -> IO Counter.Counter
-getCounter name server = Metrics.createCounter name (serverMetricStore server)
-
--- | Return a new, zero-initialized gauge associated with the given
--- name and server. Multiple calls to 'getGauge' with the same
--- arguments will result in an 'error'.
-getGauge :: T.Text  -- ^ Gauge name
-         -> Server  -- ^ Server that will serve the gauge
-         -> IO Gauge.Gauge
-getGauge name server = Metrics.createGauge name (serverMetricStore server)
-
--- | Return a new, empty label associated with the given name and
--- server. Multiple calls to 'getLabel' with the same arguments will
--- result in an 'error'.
-getLabel :: T.Text  -- ^ Label name
-         -> Server  -- ^ Server that will serve the label
-         -> IO Label.Label
-getLabel name server = Metrics.createLabel name (serverMetricStore server)
-
--- | Return a new distribution associated with the given name and
--- server. Multiple calls to 'getDistribution' with the same arguments
--- will result in an 'error'.
-getDistribution :: T.Text  -- ^ Distribution name
-                -> Server  -- ^ Server that will serve the distribution
-                -> IO Distribution.Distribution
-getDistribution name server =
-    Metrics.createDistribution name (serverMetricStore server)
-
-------------------------------------------------------------------------
--- Backwards compatibility shims
-
-#if __GLASGOW_HASKELL__ < 706
-forkFinally :: IO a -> (Either SomeException a -> IO ()) -> IO ThreadId
-forkFinally action and_then =
-  mask $ \restore ->
-    forkIO $ try (restore action) >>= and_then
-#endif
