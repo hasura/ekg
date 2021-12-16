@@ -369,49 +369,49 @@ $(document).ready(function () {
 
     function initAll() {
         // Metrics
-        var current_bytes_used = function (stats) {
-            return stats.rts.gc.current_bytes_used[0].value.val;
+        var live_bytes = function (stats) {
+            return stats.rts.gc.live_bytes[0].value.val;
         };
-        var max_bytes_used = function (stats) {
-            return stats.rts.gc.max_bytes_used[0].value.val;
+        var max_live_bytes = function (stats) {
+            return stats.rts.max_live_bytes[0].value.val;
         };
-        var max_bytes_slop = function (stats) {
-            return stats.rts.gc.max_bytes_slop[0].value.val;
+        var max_slop_bytes = function (stats) {
+            return stats.rts.max_slop_bytes[0].value.val;
         };
-        var current_bytes_slop = function (stats) {
-            return stats.rts.gc.current_bytes_slop[0].value.val;
+        var slop_bytes = function (stats) {
+            return stats.rts.gc.slop_bytes[0].value.val;
         };
         var productivity_wall_percent = function (stats, time, prev_stats, prev_time) {
             if (prev_stats == undefined)
                 return null;
-            var mutator_ms = stats.rts.gc.mutator_wall_ms[0].value.val -
-                prev_stats.rts.gc.mutator_wall_ms[0].value.val;
-            var gc_ms = stats.rts.gc.gc_wall_ms[0].value.val -
-                prev_stats.rts.gc.gc_wall_ms[0].value.val;
-            return 100 * mutator_ms / (mutator_ms + gc_ms);
+            var mutator_ns = stats.rts.mutator_elapsed_ns[0].value.val -
+                prev_stats.rts.mutator_elapsed_ns[0].value.val;
+            var gc_ns = stats.rts.gc_elapsed_ns[0].value.val -
+                prev_stats.rts.gc_elapsed_ns[0].value.val;
+            return 100 * mutator_ns / (mutator_ns + gc_ns);
         };
         var productivity_cpu_percent = function (stats, time, prev_stats, prev_time) {
             if (prev_stats == undefined)
                 return null;
-            var mutator_ms = stats.rts.gc.mutator_cpu_ms[0].value.val -
-                prev_stats.rts.gc.mutator_cpu_ms[0].value.val;
-            var gc_ms = stats.rts.gc.gc_cpu_ms[0].value.val -
-                prev_stats.rts.gc.gc_cpu_ms[0].value.val;
-            return 100 * mutator_ms / (mutator_ms + gc_ms);
+            var mutator_ns = stats.rts.mutator_cpu_ns[0].value.val -
+                prev_stats.rts.mutator_cpu_ns[0].value.val;
+            var gc_ns = stats.rts.gc_cpu_ns[0].value.val -
+                prev_stats.rts.gc_cpu_ns[0].value.val;
+            return 100 * mutator_ns / (mutator_ns + gc_ns);
         };
         var allocation_rate = function (stats, time, prev_stats, prev_time) {
             if (prev_stats == undefined)
                 return null;
-            return 1000 * (stats.rts.gc.bytes_allocated[0].value.val -
-                           prev_stats.rts.gc.bytes_allocated[0].value.val) /
+            return 1000 * (stats.rts.allocated_bytes[0].value.val -
+                           prev_stats.rts.allocated_bytes[0].value.val) /
                 (time - prev_time);
         };
 
         addMetrics($("#metric-table"));
 
         // Plots
-        addPlot($("#current-bytes-used-plot > div"),
-                [{ label: "residency", fn: current_bytes_used }],
+        addPlot($("#live-bytes-plot > div"),
+                [{ label: "residency", fn: live_bytes }],
                 { yaxis: { tickFormatter: suffixFormatter } });
         addPlot($("#allocation-rate-plot > div"),
                 [{ label: "rate", fn: allocation_rate }],
@@ -422,10 +422,10 @@ $(document).ready(function () {
                 { yaxis: { tickDecimals: 1, tickFormatter: percentFormatter } });
 
         // GC and memory statistics
-        addCounter($("#max-bytes-used"), max_bytes_used, formatSuffix);
-        addCounter($("#current-bytes-used"), current_bytes_used, formatSuffix);
-        addCounter($("#max-bytes-slop"), max_bytes_slop, formatSuffix);
-        addCounter($("#current-bytes-slop"), current_bytes_slop, formatSuffix);
+        addCounter($("#max-live-bytes"), max_live_bytes, formatSuffix);
+        addCounter($("#live-bytes"), live_bytes, formatSuffix);
+        addCounter($("#max-slop-bytes"), max_slop_bytes, formatSuffix);
+        addCounter($("#slop-bytes"), slop_bytes, formatSuffix);
         addCounter($("#productivity-wall"), productivity_wall_percent, formatPercent);
         addCounter($("#productivity-cpu"), productivity_cpu_percent, formatPercent);
         addCounter($("#allocation-rate"), allocation_rate, formatRate);
